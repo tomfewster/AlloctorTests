@@ -28,22 +28,24 @@
 
 #include <cstddef>
 #include <cassert>
+#include <atomic>
 #include "optimize.h"
 
 namespace tf {
 
-    class new_arena {
+    template <std::size_t S = 1024> class new_arena {
     public:
         using value_type = unsigned char;
         using pointer = value_type*;
+        static constexpr std::size_t initial_size = S;
 
     private:
         struct alignas(16) slab {
             pointer m_content;
-            pointer m_head;
-            slab *m_next;
+            std::atomic<pointer> m_head;
+            std::atomic<slab *>m_next;
             std::size_t m_size;
-            std::size_t m_allocated;
+            std::atomic<std::size_t> m_allocated;
 
             static inline std::size_t align_up(std::size_t n) noexcept {
                 static const size_t alignment = 16 - 1;
@@ -78,21 +80,22 @@ namespace tf {
             }
 
             inline std::size_t free() const noexcept {
-                return m_size - std::distance(m_content, m_head);
+                return m_size - std::distance(m_content, m_head.load(std::memory_order_relaxed));
             }
 
             inline pointer allocate(std::size_t size) noexcept {
                 size = align_up(size);
                 assert(this->free() >= size);
                 pointer p = m_head;
-                std::advance(m_head, size);
-                m_allocated += size;
+                m_head.fetch_add(size);
+                m_allocated.fetch_add(size);
                 return p;
             }
 
             inline void deallocate(pointer ptr, std::size_t size) noexcept {
                 assert(pointer_in_buffer(ptr));
                 size = align_up(size);
+                m_allocated.fetch_sub(size, std::memory_order_acq_rel);
                 if ((m_allocated -= size) == 0) {
                     m_head = m_content;
                 } else if (ptr + size == m_head) {
@@ -101,10 +104,8 @@ namespace tf {
             }
         };
 
-        std::size_t m_initial_size;
-
-        slab *m_root_slab;
-        slab *m_current_slab;
+        thread_local static slab *s_root_slab;
+        thread_local static slab *s_current_slab;
 
         inline slab *find_slab_with_space(slab *start, std::size_t size) const noexcept {
             if (likely(start->free() >= size)) {
@@ -128,16 +129,19 @@ namespace tf {
 
     public:
         ~new_arena() {
-            slab *s = m_root_slab;
+            slab *s = s_root_slab;
             while (s != nullptr) {
                 s = s->m_next;
                 delete s;
             }
-            m_root_slab = nullptr;
+            s_root_slab = nullptr;
         }
 
-        new_arena(std::size_t initial_size = 1024) noexcept : m_initial_size(initial_size), m_root_slab(new slab(initial_size)) {
-            m_current_slab = m_root_slab;
+        new_arena() noexcept {
+            if (s_root_slab == nullptr) {
+                s_root_slab = new slab(initial_size);
+                s_current_slab = s_root_slab;
+            }
         }
 
         new_arena(const new_arena&) = delete;
@@ -145,24 +149,24 @@ namespace tf {
 
         new_arena::pointer allocate(std::size_t size) {
             slab *s = nullptr;
-            if (likely(m_current_slab->free() >= size)) {
-                return m_current_slab->allocate(size);
+            if (likely(s_current_slab->free() >= size)) {
+                return s_current_slab->allocate(size);
             } else {
-                if ((s = find_slab_with_space(m_root_slab, size)) != nullptr) {
+                if ((s = find_slab_with_space(s_root_slab, size)) != nullptr) {
                     return s->allocate(size);
                 } else {
-                    m_current_slab->m_next = new slab(std::max(size, m_initial_size));
-                    m_current_slab = m_current_slab->m_next;
-                    return m_current_slab->allocate(size);
+                    s_current_slab->m_next = new slab(std::max(size, initial_size));
+                    s_current_slab = s_current_slab->m_next;
+                    return s_current_slab->allocate(size);
                 }
             }
         }
 
         void deallocate(new_arena::pointer p, std::size_t size) noexcept {
-            if (m_current_slab->pointer_in_buffer(p)) {
-                m_current_slab->deallocate(p, size);
+            if (s_current_slab->pointer_in_buffer(p)) {
+                s_current_slab->deallocate(p, size);
             } else {
-                slab *s = find_slab_containing(m_root_slab, p);
+                slab *s = find_slab_containing(s_root_slab, p);
                 assert(s != nullptr);
                 if (s != nullptr) {
                     s->deallocate(p, size);
@@ -186,12 +190,15 @@ namespace tf {
                 }
             };
 
-            totals(a.m_root_slab);
+            totals(a.s_root_slab);
 
             out << "allocated: " << total_allocated << " capacity: " << total_capacity << " allocatable: " << total_free << " from " << block_count << " blocks";
             return out;
         }
     };
+
+    template<std::size_t S> thread_local typename new_arena<S>::slab *new_arena<S>::s_root_slab = nullptr;
+    template<std::size_t S> thread_local typename new_arena<S>::slab *new_arena<S>::s_current_slab = nullptr;
 }
 #endif //FASTPATH_FAST_LINEAR_ALLOCATOR_H
 

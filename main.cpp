@@ -91,7 +91,7 @@ template <typename A> void runTests(A &allocator) {
 
 template <typename T> void testForType(const char *type) {
 
-    const std::size_t pre_alloc_size = 1024 * 1024;
+    static const std::size_t pre_alloc_size = 1024 * 1024;
 
     std::cout << std::endl << "=====================" << std::endl;
     std::cout << " Testing " << type << " (" << sizeof(T) << ")"<< std::endl;
@@ -128,8 +128,8 @@ template <typename T> void testForType(const char *type) {
     }
 
     {
-        typename tf::linear_allocator<T, tf::new_arena>::arena_type arena(pre_alloc_size);
-        typename tf::linear_allocator<T, tf::new_arena> allocator(arena);
+        typename tf::linear_allocator<T, tf::new_arena<pre_alloc_size>>::arena_type arena;
+        typename tf::linear_allocator<T, tf::new_arena<pre_alloc_size>> allocator(arena);
         runTests(allocator);
     }
 
