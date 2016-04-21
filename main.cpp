@@ -11,7 +11,7 @@
 #include "fast_linear_allocator2.h"
 #include "performance.h"
 #include "short_alloc.h"
-#include <boost/pool/pool_alloc.hpp>
+//#include <boost/pool/pool_alloc.hpp>
 
 template <typename A> void testSimpleAllocateDeallocate(A &allocator) {
     for (int i = 0; i < 1000000; ++i) {
@@ -54,7 +54,8 @@ template <typename T> void testForType(const char *type) {
 
     const std::size_t pre_alloc_size = 1024 * 1024;
 
-    std::cout << " Testing " << type << std::endl;
+    std::cout << std::endl << "=====================" << std::endl;
+    std::cout << " Testing " << type << " (" << sizeof(T) << ")"<< std::endl;
     std::cout << "=====================" << std::endl;
 
     {
@@ -80,15 +81,15 @@ template <typename T> void testForType(const char *type) {
         runTests(allocator);
     }
 
-    {
-        boost::fast_pool_allocator<T, boost::default_user_allocator_new_delete, boost::details::pool::null_mutex> allocator;
-        runTests(allocator);
-    }
-
-    {
-        boost::fast_pool_allocator<T> allocator;
-        runTests(allocator);
-    }
+//    {
+//        boost::fast_pool_allocator<T, boost::default_user_allocator_new_delete, boost::details::pool::null_mutex> allocator;
+//        runTests(allocator);
+//    }
+//
+//    {
+//        boost::fast_pool_allocator<T> allocator;
+//        runTests(allocator);
+////    }
 }
 
 #define TEST(x) testForType<x>(#x)

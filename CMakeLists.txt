@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 2.8)
 project(AlloctorTests)
 
 set(GENERIC_COMPILER_FLAGS "-Wall -pedantic -std=c++14 -mtune=native -fomit-frame-pointer")
