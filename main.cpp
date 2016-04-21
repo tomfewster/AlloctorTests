@@ -6,6 +6,7 @@
 #include <vector>
 #include <ctime>
 #include <iomanip>
+#include <array>
 
 #include "fast_linear_allocator.h"
 #include "arena_unoptimised.h"
@@ -15,7 +16,22 @@
 #include "new_delete_allocator.h"
 //#include <boost/pool/pool_alloc.hpp>
 
-static const std::size_t iterations = 1000000;
+static const std::size_t iterations = 10000000;
+
+typedef std::array<bool, iterations> add_remove_flags_type;
+add_remove_flags_type add_remove_flags;
+
+typedef std::array<std::size_t, iterations> random_allocation_sizes_type;
+random_allocation_sizes_type random_allocation_sizes;
+
+static void initialise() {
+    std::srand(std::time(0));
+
+    for (std::size_t i = 0; i < iterations; ++i) {
+        add_remove_flags[i] = std::rand() % 2;
+        random_allocation_sizes[i] = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * 1024);
+    }
+}
 
 template <typename A> void testSimpleAllocateDeallocate(A &allocator) {
     for (std::size_t i = 0; i < iterations; ++i) {
@@ -25,12 +41,11 @@ template <typename A> void testSimpleAllocateDeallocate(A &allocator) {
 }
 
 template <typename A> void testSimpleRandomAllocateDeallocate(A &allocator) {
-    std::srand(std::time(0));
     std::vector<typename std::allocator_traits<A>::pointer> m_allocations;
+    m_allocations.reserve(iterations);
 
     for (std::size_t i = 0; i < iterations; ++i) {
-        int add_remove = std::rand();
-        if (add_remove % 2) {
+        if (add_remove_flags[i]) {
             m_allocations.push_back(std::allocator_traits<A>::allocate(allocator, 100));
         } else if (m_allocations.size() != 0) {
             size_t index = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * m_allocations.size());
@@ -41,14 +56,13 @@ template <typename A> void testSimpleRandomAllocateDeallocate(A &allocator) {
 }
 
 template <typename A> void testAllocateDeallocateRandomSize(A &allocator) {
-    std::srand(std::time(0));
     std::vector<std::pair<std::size_t, typename std::allocator_traits<A>::pointer>> m_allocations;
+    m_allocations.reserve(iterations);
 
     for (std::size_t i = 0; i < iterations; ++i) {
-        int add_remove = std::rand();
         // create anything between 0 and 1k
-        std::size_t size = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * 1024);
-        if (add_remove % 2) {
+        std::size_t size = random_allocation_sizes[i];
+        if (add_remove_flags[i]) {
             m_allocations.emplace_back(size, std::allocator_traits<A>::allocate(allocator, size));
         } else if (m_allocations.size() != 0) {
             size_t index = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * m_allocations.size());
@@ -61,10 +75,11 @@ template <typename A> void testAllocateDeallocateRandomSize(A &allocator) {
 
 template <typename A> void runTests(A &allocator) {
 
-    std::cout << std::left << std::setw(80) << std::string(typeid(A).name()).substr(0, 80);
+    std::cout << std::left << std::setw(60) << std::string(typeid(A).name()).substr(0, 60);
 
     auto logger = [&](const std::chrono::microseconds &time) {
-        std::cout << std::setw(20) << std::setprecision(3) << std::right << time.count() << " us";
+        auto t = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(time);
+        std::cout << std::setw(27) << std::setprecision(4) << std::fixed << std::right << t.count() << " ms";
     };
 
     logger(tf::measure<std::chrono::microseconds>::execution([&]() { testSimpleAllocateDeallocate(allocator); }));
@@ -81,6 +96,14 @@ template <typename T> void testForType(const char *type) {
     std::cout << std::endl << "=====================" << std::endl;
     std::cout << " Testing " << type << " (" << sizeof(T) << ")"<< std::endl;
     std::cout << "=====================" << std::endl;
+
+    std::cout << std::left << std::setw(60) << "Allocator Type";
+    std::vector<std::string> tests = {"AllocateDeallocate", "RandomAllocationDeallocate", "AllocateDeallocateRandomSize"};
+    for (const std::string &test : tests) {
+        std::cout << std::setw(30) << std::setprecision(3) << std::right << test;
+    }
+    std::cout << std::endl;
+
 
     {
         std::allocator<T> allocator;
@@ -130,6 +153,8 @@ template <typename T> void testForType(const char *type) {
 #define TEST(x) testForType<x>(#x)
 
 int main() {
+
+    initialise();
 
     struct small_obj {
         char data[200];
