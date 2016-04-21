@@ -183,7 +183,7 @@ namespace tf {
         }
     };
 
-    template <typename T> class linear_allocator {
+    template <typename T, typename Arena = tf::arena> class linear_allocator {
     public:
         typedef T value_type;
         typedef value_type* pointer;
@@ -193,7 +193,7 @@ namespace tf {
         typedef std::size_t size_type;
         typedef std::ptrdiff_t difference_type;
 
-        using arena_type = arena;
+        using arena_type = Arena;
 
     private:
 
@@ -217,7 +217,7 @@ namespace tf {
         }
 
         inline void deallocate(T* p, std::size_t size) noexcept {
-            m_arena.deallocate(reinterpret_cast<arena_type::pointer>(p), size);
+            m_arena.deallocate(reinterpret_cast<typename arena_type::pointer>(p), size);
         }
     };
 

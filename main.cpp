@@ -8,13 +8,17 @@
 #include <iomanip>
 
 #include "fast_linear_allocator.h"
-#include "fast_linear_allocator2.h"
+#include "arena_unoptimised.h"
+#include "new_arena.h"
 #include "performance.h"
 #include "short_alloc.h"
+#include "new_delete_allocator.h"
 //#include <boost/pool/pool_alloc.hpp>
 
+static const std::size_t iterations = 1000000;
+
 template <typename A> void testSimpleAllocateDeallocate(A &allocator) {
-    for (int i = 0; i < 1000000; ++i) {
+    for (std::size_t i = 0; i < iterations; ++i) {
         auto ptr = std::allocator_traits<A>::allocate(allocator, 100);
         std::allocator_traits<A>::deallocate(allocator, ptr, 100);
     }
@@ -24,13 +28,32 @@ template <typename A> void testSimpleRandomAllocateDeallocate(A &allocator) {
     std::srand(std::time(0));
     std::vector<typename std::allocator_traits<A>::pointer> m_allocations;
 
-    for (int i = 0; i < 1000000; ++i) {
+    for (std::size_t i = 0; i < iterations; ++i) {
         int add_remove = std::rand();
         if (add_remove % 2) {
             m_allocations.push_back(std::allocator_traits<A>::allocate(allocator, 100));
         } else if (m_allocations.size() != 0) {
             size_t index = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * m_allocations.size());
             std::allocator_traits<A>::deallocate(allocator, m_allocations[index], 100);
+            m_allocations.erase(m_allocations.begin() + index);
+        }
+    }
+}
+
+template <typename A> void testAllocateDeallocateRandomSize(A &allocator) {
+    std::srand(std::time(0));
+    std::vector<std::pair<std::size_t, typename std::allocator_traits<A>::pointer>> m_allocations;
+
+    for (std::size_t i = 0; i < iterations; ++i) {
+        int add_remove = std::rand();
+        // create anything between 0 and 1k
+        std::size_t size = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * 1024);
+        if (add_remove % 2) {
+            m_allocations.emplace_back(size, std::allocator_traits<A>::allocate(allocator, size));
+        } else if (m_allocations.size() != 0) {
+            size_t index = static_cast<size_t>((static_cast<double>(std::rand()) / RAND_MAX) * m_allocations.size());
+            auto m = m_allocations[index];
+            std::allocator_traits<A>::deallocate(allocator, m.second, m.first);
             m_allocations.erase(m_allocations.begin() + index);
         }
     }
@@ -46,6 +69,7 @@ template <typename A> void runTests(A &allocator) {
 
     logger(tf::measure<std::chrono::microseconds>::execution([&]() { testSimpleAllocateDeallocate(allocator); }));
     logger(tf::measure<std::chrono::microseconds>::execution([&]() { testSimpleRandomAllocateDeallocate(allocator); }));
+    logger(tf::measure<std::chrono::microseconds>::execution([&]() { testAllocateDeallocateRandomSize(allocator); }));
 
     std::cout << std::endl;
 }
@@ -64,14 +88,25 @@ template <typename T> void testForType(const char *type) {
     }
 
     {
+        new_delete_allocator<T> allocator;
+        runTests(allocator);
+    }
+
+    {
         typename tf::linear_allocator<T>::arena_type arena(pre_alloc_size);
         typename tf::linear_allocator<T> allocator(arena);
         runTests(allocator);
     }
 
     {
-        typename tf::linear_allocator2<T>::arena_type arena(pre_alloc_size);
-        typename tf::linear_allocator2<T> allocator(arena);
+        typename tf::linear_allocator<T, tf::arena_unoptimised>::arena_type arena(pre_alloc_size);
+        typename tf::linear_allocator<T, tf::arena_unoptimised> allocator(arena);
+        runTests(allocator);
+    }
+
+    {
+        typename tf::linear_allocator<T, tf::new_arena>::arena_type arena(pre_alloc_size);
+        typename tf::linear_allocator<T, tf::new_arena> allocator(arena);
         runTests(allocator);
     }
 

@@ -31,9 +31,9 @@
 
 namespace tf {
 
-    class arena2 {
+    class arena_unoptimised {
     public:
-        using pointer = unsigned char*;
+        using pointer = unsigned char *;
         using value_type = pointer;
 
     private:
@@ -46,7 +46,7 @@ namespace tf {
 
             static std::size_t align_up(std::size_t n) noexcept {
                 static const size_t alignment = 16;
-                return (n + (alignment-1)) & ~(alignment-1);
+                return (n + (alignment - 1)) & ~(alignment - 1);
             }
 
             inline bool pointer_in_buffer(pointer p) const noexcept {
@@ -113,7 +113,7 @@ namespace tf {
         }
 
     public:
-        ~arena2() {
+        ~arena_unoptimised() {
             slab *s = m_root_slab;
             while (s != nullptr) {
                 s = s->m_next;
@@ -122,14 +122,16 @@ namespace tf {
             m_root_slab = nullptr;
         }
 
-        arena2(std::size_t initial_size = 1024) noexcept : m_initial_size(initial_size), m_root_slab(new slab(initial_size)) {
+        arena_unoptimised(std::size_t initial_size = 1024) noexcept : m_initial_size(initial_size),
+                                                                      m_root_slab(new slab(initial_size)) {
             m_current_slab = m_root_slab;
         }
 
-        arena2(const arena2&) = delete;
-        arena2& operator=(const arena2&) = delete;
+        arena_unoptimised(const arena_unoptimised &) = delete;
 
-        arena2::pointer allocate(std::size_t size) {
+        arena_unoptimised &operator=(const arena_unoptimised &) = delete;
+
+        arena_unoptimised::pointer allocate(std::size_t size) {
             slab *s = nullptr;
             if ((s = find_slab_with_space(m_root_slab, size)) != nullptr) {
                 return s->allocate(size);
@@ -140,7 +142,7 @@ namespace tf {
             }
         }
 
-        void deallocate(arena2::pointer p, std::size_t size) noexcept {
+        void deallocate(arena_unoptimised::pointer p, std::size_t size) noexcept {
             slab *s = find_slab_containing(m_root_slab, p);
             assert(s != nullptr);
             if (s != nullptr) {
@@ -148,7 +150,7 @@ namespace tf {
             }
         }
 
-        friend std::ostream &operator<<(std::ostream &out, const arena2 &a) {
+        friend std::ostream &operator<<(std::ostream &out, const arena_unoptimised &a) {
             std::size_t block_count = 0;
             std::size_t total_free = 0;
             std::size_t total_capacity = 0;
@@ -166,59 +168,12 @@ namespace tf {
 
             totals(a.m_root_slab);
 
-            out << "allocated: " << total_allocated << " capacity: " << total_capacity << " allocatable: " << total_free << " from " << block_count << " blocks";
+            out << "allocated: " << total_allocated << " capacity: " << total_capacity << " allocatable: " <<
+            total_free << " from " << block_count << " blocks";
             return out;
         }
 
-//        static constexpr std::size_t size() noexcept {return N;}
-
-//        std::size_t used() const noexcept {
-//            return static_cast<std::size_t>(ptr_ - buf_);
-//        }
-
-//        void reset() noexcept {ptr_ = buf_;}
     };
-
-    template <typename T> class linear_allocator2 {
-    public:
-        typedef T value_type;
-        typedef value_type* pointer;
-        typedef const value_type* const_pointer;
-        typedef value_type& reference;
-        typedef const value_type& const_reference;
-        typedef std::size_t size_type;
-        typedef std::ptrdiff_t difference_type;
-
-        using arena_type = arena2;
-
-    private:
-
-        typedef char* storage_type;
-
-        arena_type &m_arena;
-
-    public:
-        template<typename U> struct rebind {
-            typedef linear_allocator<U> other;
-        };
-
-        linear_allocator2(arena_type &arena) : m_arena(arena) {}
-
-        ~linear_allocator2() {}
-
-        linear_allocator2(const linear_allocator2 &other) : m_arena(other.m_arena) {}
-
-        inline pointer allocate(const std::size_t size) noexcept {
-            return reinterpret_cast<pointer>(m_arena.allocate(size));
-        }
-
-        inline void deallocate(T* p, std::size_t size) noexcept {
-            m_arena.deallocate(reinterpret_cast<arena_type::pointer>(p), size);
-        }
-    };
-
-    template <class T, class U> bool operator==(const linear_allocator2<T>&, const linear_allocator2<U>&);
-    template <class T, class U> bool operator!=(const linear_allocator2<T>&, const linear_allocator2<U>&);
 }
 #endif //FASTPATH_FAST_LINEAR_ALLOCATOR_H
 

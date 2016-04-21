@@ -25,6 +25,6 @@ set(SOURCE_FILES
         fast_linear_allocator.h
         short_alloc.h
         main.cpp
-        )
+        new_delete_allocator.h)
 add_executable(AlloctorTests ${SOURCE_FILES})
 target_link_libraries(AlloctorTests ${Boost_LIBRARIES})
