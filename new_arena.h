@@ -33,17 +33,18 @@
 
 namespace tf {
 
-    template <std::size_t S = 1024> class new_arena {
+    template<std::size_t S = 1024>
+    class new_arena {
     public:
         using value_type = unsigned char;
-        using pointer = value_type*;
+        using pointer = value_type *;
         static constexpr std::size_t initial_size = S;
 
     private:
         struct alignas(16) slab {
             pointer m_content;
             std::atomic<pointer> m_head;
-            std::atomic<slab *>m_next;
+            std::atomic<slab *> m_next;
             std::size_t m_size;
             std::atomic<std::size_t> m_allocated;
 
@@ -104,8 +105,8 @@ namespace tf {
             }
         };
 
-        thread_local static slab *s_root_slab;
-        thread_local static slab *s_current_slab;
+        static __thread slab *s_root_slab;
+        static __thread slab *s_current_slab;
 
         inline slab *find_slab_with_space(slab *start, std::size_t size) const noexcept {
             if (likely(start->free() >= size)) {
@@ -144,8 +145,8 @@ namespace tf {
             }
         }
 
-        new_arena(const new_arena&) = delete;
-        new_arena& operator=(const new_arena&) = delete;
+        new_arena(const new_arena &) = delete;
+        new_arena &operator=(const new_arena &) = delete;
 
         new_arena::pointer allocate(std::size_t size) {
             slab *s = nullptr;
@@ -197,8 +198,9 @@ namespace tf {
         }
     };
 
-    template<std::size_t S> thread_local typename new_arena<S>::slab *new_arena<S>::s_root_slab = nullptr;
-    template<std::size_t S> thread_local typename new_arena<S>::slab *new_arena<S>::s_current_slab = nullptr;
+    template<std::size_t S> __thread typename new_arena<S>::slab *new_arena<S>::s_root_slab = nullptr;
+    template<std::size_t S> __thread typename new_arena<S>::slab *new_arena<S>::s_current_slab = nullptr;
+    template<std::size_t S> constexpr std::size_t new_arena<S>::initial_size;
 }
-#endif //FASTPATH_FAST_LINEAR_ALLOCATOR_H
+#endif //FASTPATH_FAST_LINEAR_ALLOCATORe_H
 
